@@ -34,7 +34,6 @@ class PillarFeatureNet(nn.Module):
 
 
 
-
 class Pillarization:
     def __init__(self, device, x_min, x_max, y_min, y_max, z_min, z_max, pillar_size,
                 max_points_per_pillar, aug_dim, max_pillars):
