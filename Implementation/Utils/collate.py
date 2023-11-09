@@ -11,7 +11,7 @@ import copy
 
 
 
-def normalize_annotations(annotations, pillar_size):
+def normalize_annotations(annotations, pillar_size, x_lims, y_lims):
     # Extend num_attributes to store both original and normalized coordinates
     num_attributes = 14  # x, y, z, h, w, l, rotation_y (both original and normalized)
     max_annotations = max(len(a['Car']) for a in annotations)
@@ -23,13 +23,15 @@ def normalize_annotations(annotations, pillar_size):
         for j, car in enumerate(a['Car']):
             if car:  # Check if the annotation is not empty
                 # Original coordinates
-                orig_x, orig_y, orig_z = car['location']
+                orig_y, orig_z, orig_x = car['location'] # Transformation from camera to velo is applied
                 orig_h, orig_w, orig_l = car['dimensions']
                 orig_ry = car['rotation_y']
+                orig_y *= -1
+                orig_z *= -1
                 
                 # Normalize the location and dimensions to the grid size
-                norm_x = orig_x / pillar_size[0]
-                norm_y = orig_y / pillar_size[1]
+                norm_x = (orig_x - x_lims[0]) / pillar_size[0] # Applies transform from camera to velo
+                norm_y = (orig_y - y_lims[0]) / pillar_size[1] # Applies transform from camera to velo
                 norm_z = orig_z / pillar_size[0]  # Assuming Z uses the same pillar size
                 norm_h = orig_h / pillar_size[0]  # Assuming H uses the same pillar size
                 norm_w = orig_w / pillar_size[1]
