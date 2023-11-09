@@ -1,4 +1,3 @@
-
 import torch
 import numpy as np
 import torch.nn as nn
@@ -15,5 +14,12 @@ def transform_to_grid(length, width, height, z_center, orientation, pillar_size)
     length_tr = length // pillar_size[0] # Assumes pillar size is equal in both dimensions
     width_tr = width // pillar_size[0]
     return length_tr, width_tr
+
+
+# Map anchors to image:
+def map_to_img(value: float, pillar_size: tuple, min_value: float):
+    mapped_value = (value - min_value) // pillar_size[0] # Floored division
+    assert mapped_value >= 0.0
+    return mapped_value
 
 
