@@ -1,4 +1,3 @@
-
 import os
 import pdb
 import torch
@@ -54,7 +53,8 @@ class Pillarization:
 
     def make_pillars(self, points):
         """
-        Convert point cloud (x, y, z) into pillars.
+        In: points
+        Out: top_pillars (limited non-empty pillars), top_pillars_x_indices, top_pillars_y_indices
         """
         # Mask points outside of our defined boundaries
         
@@ -83,18 +83,20 @@ class Pillarization:
 
         
         # Calculate x,y indices for each point:
-        self.x_indices = points[:,0] - self.x_min / self.pillar_size[0]
-        self.y_indices = points[:,1] - self.y_min / self.pillar_size[1] 
-
+        self.x_indices = (points[:,0] - self.x_min) / self.pillar_size[0]
+        self.y_indices = (points[:,1] - self.y_min) / self.pillar_size[1] 
         self.x_indices = self.x_indices.int()
         self.y_indices = self.y_indices.int()
 
    
         # TODO: Store points in the pillars in a vectorized way filling the pillars tensor (Note: Pretty sure there is a faster approach for this)     
-        for i in range(points.shape[0]):
+        for i in range(points.shape[0]): # FIXME: See if this -1 here is correct
             x_ind = self.x_indices[i]
             y_ind = self.y_indices[i]
             
+            #if (y_ind == 499):
+            #    pdb.set_trace()
+
             if count[x_ind, y_ind] < self.max_points_per_pillar:
                 # Compute x_c, y_c and z_c
                 x_c = (x_ind * self.pillar_size[0] + self.pillar_size[0] / 2.0) - points[i, 0]
@@ -104,10 +106,10 @@ class Pillarization:
                 # Calculate pillar center
                 x_pillar_center = (x_ind * self.pillar_size[0] + self.pillar_size[0] / 2.0)
                 y_pillar_center = (y_ind * self.pillar_size[1] + self.pillar_size[1] / 2.0)
-                
                 # Add original x, y, and z coordinates, then x_c, y_c, z_c
-                pillars[x_ind, y_ind, count[x_ind, y_ind], :3] = points[i, :3]
-                
+                pillars[x_ind, y_ind, count[x_ind, y_ind], :3] = points[i, :3] # BUG: Index out of range
+
+        
                 if (self.device != torch.device('cpu')): 
                     pillars[x_ind, y_ind, count[x_ind, y_ind], 3:6] = torch.tensor([x_c, y_c, z_c]).to(self.device)
                 else: 
@@ -117,6 +119,10 @@ class Pillarization:
                 pillars[x_ind, y_ind, count[x_ind, y_ind], 7] = y_pillar_center - pillars[x_ind, y_ind, count[x_ind, y_ind], 1]
                 
                 count[x_ind, y_ind] += 1
+
+
+        
+        #print(f'DONE')
                 
         
         # Limit the number of pillars:
