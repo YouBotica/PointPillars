@@ -61,16 +61,60 @@ class Anchor():
         self.width = width
         self.height = height
 
-    def create_anchor_grid(self, feature_map): 
+    def create_anchor_grid(self, H, W): 
 
         '''In: feature map (bs, C, H, W)
             Returns: (grid_x, grid_y): ()
         '''
         
-        self.num_anchors_x = int(torch.round(feature_map.size()[-1] / self.width)) 
-        self.num_anchors_y = int(torch.round(feature_map.size()[-2] / self.height))
-        self.grid_x = torch.linspace(0, feature_map.size()[-1], self.num_anchors_x) 
-        self.grid_y = torch.linspace(0, feature_map.size()[-2], self.num_anchors_y) 
+        self.num_anchors_x = int(torch.round(W / self.width)) 
+        self.num_anchors_y = int(torch.round(H / self.height))
+        self.grid_x = torch.linspace(0, W, self.num_anchors_x) 
+        self.grid_y = torch.linspace(0, H, self.num_anchors_y) 
+
+    
+    # TODO: Implement the two new methods for vectorized IoU:
+    def create_anchors(self):
+        # Create anchor top-left and bottom-right coordinates
+        anchor_tl_x = (self.grid_x - self.width / 2).unsqueeze(1)
+        anchor_tl_y = (self.grid_y - self.height / 2).unsqueeze(0)
+        anchor_br_x = (self.grid_x + self.width / 2).unsqueeze(1)
+        anchor_br_y = (self.grid_y + self.height / 2).unsqueeze(0)
+
+        # Repeat coordinates to create a full grid
+        anchor_tl_x = anchor_tl_x.repeat(1, len(self.grid_y))
+        anchor_tl_y = anchor_tl_y.repeat(len(self.grid_x), 1)
+        anchor_br_x = anchor_br_x.repeat(1, len(self.grid_y))
+        anchor_br_y = anchor_br_y.repeat(len(self.grid_x), 1)
+
+        return anchor_tl_x, anchor_tl_y, anchor_br_x, anchor_br_y
+    
+    
+    def calculate_iou(self, anchor_tl_x, anchor_tl_y, anchor_br_x, anchor_br_y, box):
+        # Convert box coordinates to tensors
+        box_tl_x, box_tl_y, box_br_x, box_br_y = box
+
+        # Calculate intersection top-left and bottom-right
+        inter_tl_x = torch.max(anchor_tl_x, box_tl_x)
+        inter_tl_y = torch.max(anchor_tl_y, box_tl_y)
+        inter_br_x = torch.min(anchor_br_x, box_br_x)
+        inter_br_y = torch.min(anchor_br_y, box_br_y)
+
+        # Calculate intersection area
+        inter_area = (inter_br_x - inter_tl_x).clamp(min=0) * (inter_br_y - inter_tl_y).clamp(min=0)
+
+        # Calculate anchor and box areas
+        anchor_area = (anchor_br_x - anchor_tl_x) * (anchor_br_y - anchor_tl_y)
+        box_area = (box_br_x - box_tl_x) * (box_br_y - box_tl_y)
+
+        # Calculate union area
+        union_area = anchor_area + box_area - inter_area
+
+        # Compute IoU
+        iou = inter_area / union_area
+
+        return iou
+
     
     def get_ROI_indices(self, feature_map, ROIs_list):
 
