@@ -30,8 +30,8 @@ def normalize_annotations(annotations, pillar_size, x_lims, y_lims):
                 orig_z *= -1
                 
                 # Normalize the location and dimensions to the grid size
-                norm_x = (orig_x - x_lims[0]) / pillar_size[0] # Applies transform from camera to velo
-                norm_y = (orig_y - y_lims[0]) / pillar_size[1] # Applies transform from camera to velo
+                norm_x = (orig_x - x_lims[0]) / pillar_size[0] 
+                norm_y = (orig_y - y_lims[0]) / pillar_size[1] 
                 norm_z = orig_z / pillar_size[0]  # Assuming Z uses the same pillar size
                 norm_h = orig_h / pillar_size[0]  # Assuming H uses the same pillar size
                 norm_w = orig_w / pillar_size[1]
