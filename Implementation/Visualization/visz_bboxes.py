@@ -10,8 +10,6 @@ from Pipelines.anchors import Anchor
 def visualize_batch_bounding_boxes(feature_maps, boxes_tensor, attributes_idx, visz_anchor, anchor):
     ''' boxes tensor: orig_x, orig_y, orig_z, orig_h, orig_w, orig_l, orig_ry,
     norm_x, norm_y, norm_z, norm_h, norm_w, norm_l, orig_ry '''
-    
-    # NOTE: Matplotlib inline?
 
     # Get the batch size and the number of channels
     batch_size, channels, height, width = feature_maps.shape
