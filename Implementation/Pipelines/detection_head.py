@@ -30,7 +30,9 @@ class DetectionHead(nn.Module):
         x.to(self.device)
         loc = self.loc_layer(x).view(x.size(0), self.num_anchors, 3, self.grid_size_x, self.grid_size_y)
         size = self.size_layer(x).view(x.size(0), self.num_anchors, 3, self.grid_size_x, self.grid_size_y)
-        clf = self.clf_layer(x).view(x.size(0), self.num_anchors, self.num_classes + 1, self.grid_size_x, self.grid_size_y)
+        clf = torch.sigmoid(self.clf_layer(x)).view(x.size(0), 
+                self.num_anchors, self.num_classes + 1, self.grid_size_x, self.grid_size_y)
+        #clf = self.clf_layer(x).view(x.size(0), self.num_anchors, self.num_classes + 1, self.grid_size_x, self.grid_size_y)
         occupancy = self.occupancy_layer(x).view(x.size(0), self.num_anchors, 1, self.grid_size_x, self.grid_size_y)
         angle = self.angle_layer(x).view(x.size(0), self.num_anchors, 1, self.grid_size_x, self.grid_size_y)
         heading = self.heading_layer(x).view(x.size(0), self.num_anchors, 1, self.grid_size_x, self.grid_size_y)

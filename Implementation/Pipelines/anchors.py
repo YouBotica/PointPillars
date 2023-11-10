@@ -72,6 +72,30 @@ class Anchor():
         self.num_anchors_y = int(torch.round(H / self.height))
         self.grid_x = torch.linspace(0, W, self.num_anchors_x) 
         self.grid_y = torch.linspace(0, H, self.num_anchors_y) 
+    
+    def generate_ROI_boxes(self, gt_boxes_tensor, scale_factor):
+        """
+        Expands each ground truth box in gt_boxes_tensor by scale_factor to create ROI boxes.
+
+        Parameters:
+        gt_boxes_tensor -- tensor of ground truth boxes, shape (batch_size, num_boxes, 4)
+                          Format of each box: (x_min, y_min, x_max, y_max)
+        scale_factor -- factor to scale the ground truth boxes
+
+        Returns:
+        roi_boxes -- tensor of ROI boxes, shape (batch_size, num_boxes, 4)
+        """
+        # Calculate centers, widths, and heights of the ground truth boxes
+        centers = (gt_boxes_tensor[:, :, :2] + gt_boxes_tensor[:, :, 2:]) / 2
+        sizes = gt_boxes_tensor[:, :, 2:] - gt_boxes_tensor[:, :, :2]
+
+        # Scale sizes and recompute min and max coordinates
+        scaled_sizes = sizes * scale_factor
+        roi_boxes = torch.zeros_like(gt_boxes_tensor)
+        roi_boxes[:, :, :2] = centers - scaled_sizes / 2  # x_min, y_min
+        roi_boxes[:, :, 2:] = centers + scaled_sizes / 2  # x_max, y_max
+
+        return roi_boxes    
 
     
     def create_anchors(self): 
@@ -187,8 +211,8 @@ class Anchor():
                 anchor_x_idx, anchor_y_idx = np.unravel_index(max_idx.item(), (num_anchors_x, num_anchors_y))
 
                 # Scale anchor indices to feature map indices
-                feature_map_x_idx = int(anchor_x_idx * scale_x) + int(self.width/2)
-                feature_map_y_idx = int(anchor_y_idx * scale_y) + int(self.height/2)
+                feature_map_x_idx = int(anchor_x_idx * scale_x) # FIXME: Fix offsets
+                feature_map_y_idx = int(anchor_y_idx * scale_y)
 
                 if max_iou >= threshold:
                     # If max IoU is above the threshold, use it as the target
@@ -198,7 +222,46 @@ class Anchor():
                     regression_targets[batch_idx].append((box_idx, feature_map_x_idx, feature_map_y_idx))
 
         return regression_targets
+    
+    
+    
+    
 
+    def get_ROI_indices(self, roi_boxes, feature_map_size):
+        """
+        Maps ROI box coordinates to indices on the feature map grid.
+
+        Parameters:
+        roi_boxes -- tensor of ROI boxes, shape (batch_size, num_boxes, 4)
+                     Format of each box: (x_min, y_min, x_max, y_max)
+        feature_map_size -- size of the feature map grid (H, W)
+
+        Returns:
+        roi_indices -- dictionary with keys as batch indices and values as lists of tuples (box_index, x_min_idx, y_min_idx, x_max_idx, y_max_idx)
+        """
+        batch_size, num_boxes, _ = roi_boxes.shape
+        feature_map_h, feature_map_w = feature_map_size
+        roi_indices = {batch_idx: [] for batch_idx in range(batch_size)}
+
+        for batch_idx in range(batch_size):
+            for box_idx in range(num_boxes):
+                roi_box = roi_boxes[batch_idx, box_idx]
+
+                # Scale ROI box coordinates to feature map size
+                scaled_x_min = int(roi_box[0] * feature_map_w)
+                scaled_y_min = int(roi_box[1] * feature_map_h)
+                scaled_x_max = int(roi_box[2] * feature_map_w)
+                scaled_y_max = int(roi_box[3] * feature_map_h)
+
+                # Clamping to ensure indices are within feature map bounds
+                scaled_x_min = max(0, min(scaled_x_min, feature_map_w - 1))
+                scaled_y_min = max(0, min(scaled_y_min, feature_map_h - 1))
+                scaled_x_max = max(0, min(scaled_x_max, feature_map_w - 1))
+                scaled_y_max = max(0, min(scaled_y_max, feature_map_h - 1))
+
+                roi_indices[batch_idx].append((box_idx, scaled_x_min, scaled_y_min, scaled_x_max, scaled_y_max))
+
+        return roi_indices
 
 
     def plot_regression_targets(self, pseudo_images, regression_targets):
@@ -276,21 +339,3 @@ class Anchor():
         plt.show()
 
     
-    def get_ROI_indices(self, feature_map, ROIs_list):
-
-        '''In: feature_map, (bs, C, H, W),
-            ROIs_list: list(Box2D)
-            Out: {ROI #, list((idx_x_min, idx_y_min), (idx_x_max, idx_y_max))}
-        '''
-
-        ROIs_indices = {}
-        for ROI in ROIs_list:
-            # Find the indices in grid_x and grid_y for the given (x_min, y_min) point of anchor:
-            idx_x_min = int(torch.searchsorted(self.grid_x, ROI.x_anchor, right=True))
-            idx_y_min = int(torch.searchsorted(self.grid_y, ROI.y_anchor, right=True))
-
-            idx_x_max = int(torch.searchsorted(self.grid_x, ROI.x_max, right=True))
-            idx_y_max = int(torch.searchsorted(self.grid_y, ROI.y_max, right=True))
-            ROIs_indices[ROI] = [(idx_x_min, idx_y_min), (idx_x_max, idx_y_max)] 
-        
-        return ROIs_indices 
