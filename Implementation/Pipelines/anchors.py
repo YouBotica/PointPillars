@@ -179,6 +179,49 @@ class Anchor():
         return iou
     
 
+    def get_classification_targets(self, iou_tensor, feature_map_size, 
+                                   background_lower_threshold=0.05, background_upper_threshold=0.25):
+        """
+        Generates classification targets based on IoU thresholds for each anchor.
+
+        Parameters:
+        iou_tensor -- tensor of IoU values, shape (batch_size, n_boxes, num_anchors_x, num_anchors_y)
+        feature_map_size -- size of the feature map grid (H, W)
+        foreground_threshold -- IoU threshold to consider an anchor as a positive match (foreground)
+        background_lower_threshold -- lower IoU threshold for considering an anchor as a negative match (background)
+        background_upper_threshold -- upper IoU threshold for considering an anchor as a negative match (background)
+
+        Returns:
+        A dictionary with keys as batch indices and values as lists of (box_index, feature_map_x_index, feature_map_y_index, class_label)
+        """
+        batch_size, n_boxes, num_anchors_x, num_anchors_y = iou_tensor.shape
+        feature_map_h, feature_map_w = feature_map_size
+        scale_x = feature_map_w / num_anchors_x
+        scale_y = feature_map_h / num_anchors_y
+        classification_targets = {batch_idx: [] for batch_idx in range(batch_size)}
+
+        for batch_idx in range(batch_size):
+            for box_idx in range(n_boxes):
+                for anchor_x_idx in range(num_anchors_x):
+                    for anchor_y_idx in range(num_anchors_y):
+                        iou_value = iou_tensor[batch_idx, box_idx, anchor_x_idx, anchor_y_idx]
+
+                        feature_map_x_idx = int(anchor_x_idx * scale_x)
+                        feature_map_y_idx = int(anchor_y_idx * scale_y)
+
+                        # Classify as foreground or background based on IoU thresholds
+                        #if iou_value >= foreground_threshold:
+                            # Foreground target
+                        #    class_label = 1
+                        #    classification_targets[batch_idx].append((box_idx, feature_map_x_idx, feature_map_y_idx, class_label))
+                        if background_lower_threshold <= iou_value < background_upper_threshold:
+                            # Background target
+                            class_label = 0
+                            classification_targets[batch_idx].append((box_idx, feature_map_x_idx, feature_map_y_idx, class_label))
+
+        return classification_targets
+    
+
     def get_regression_targets(self, iou_tensor, feature_map_size, threshold=0.5):
         """
         This method finds the best anchor match for each ground truth box based on the IoU tensor.
