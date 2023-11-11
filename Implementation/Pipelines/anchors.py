@@ -225,41 +225,45 @@ class Anchor():
     
     
     
-    
 
-    def get_ROI_indices(self, roi_boxes, feature_map_size):
+    def get_ROI_indices(self, gt_boxes_tensor, feature_map_size, scale_factor):
         """
-        Maps ROI box coordinates to indices on the feature map grid.
+        Maps expanded ROI box coordinates to indices on the anchor grid map.
 
         Parameters:
-        roi_boxes -- tensor of ROI boxes, shape (batch_size, num_boxes, 4)
-                     Format of each box: (x_min, y_min, x_max, y_max)
+        gt_boxes_tensor -- tensor of ground truth boxes, shape (batch_size, num_boxes, 4)
+                        Format of each box: (x_min, y_min, x_max, y_max)
         feature_map_size -- size of the feature map grid (H, W)
+        n_x_grids -- number of grid cells along the x dimension
+        n_y_grids -- number of grid cells along the y dimension
 
         Returns:
-        roi_indices -- dictionary with keys as batch indices and values as lists of tuples (box_index, x_min_idx, y_min_idx, x_max_idx, y_max_idx)
+        roi_indices -- tensor of size (batch_size, num_boxes, 4) 
+                    with elements: (x_min_idx, y_min_idx, x_max_idx, y_max_idx)
         """
-        batch_size, num_boxes, _ = roi_boxes.shape
-        feature_map_h, feature_map_w = feature_map_size
-        roi_indices = {batch_idx: [] for batch_idx in range(batch_size)}
+        batch_size, num_boxes, _ = gt_boxes_tensor.shape
+        roi_indices = torch.zeros_like(gt_boxes_tensor)
 
-        for batch_idx in range(batch_size):
-            for box_idx in range(num_boxes):
-                roi_box = roi_boxes[batch_idx, box_idx]
+        # Calculate the center, width, and height of each box
+        centers = (gt_boxes_tensor[:, :, :2] + gt_boxes_tensor[:, :, 2:]) / 2
+        widths = gt_boxes_tensor[:, :, 2] - gt_boxes_tensor[:, :, 0]
+        heights = gt_boxes_tensor[:, :, 3] - gt_boxes_tensor[:, :, 1]
 
-                # Scale ROI box coordinates to feature map size
-                scaled_x_min = int(roi_box[0] * feature_map_w)
-                scaled_y_min = int(roi_box[1] * feature_map_h)
-                scaled_x_max = int(roi_box[2] * feature_map_w)
-                scaled_y_max = int(roi_box[3] * feature_map_h)
+        # Scale widths and heights by the scale factor
+        scaled_widths = widths * scale_factor
+        scaled_heights = heights * scale_factor
 
-                # Clamping to ensure indices are within feature map bounds
-                scaled_x_min = max(0, min(scaled_x_min, feature_map_w - 1))
-                scaled_y_min = max(0, min(scaled_y_min, feature_map_h - 1))
-                scaled_x_max = max(0, min(scaled_x_max, feature_map_w - 1))
-                scaled_y_max = max(0, min(scaled_y_max, feature_map_h - 1))
+        # Compute new min and max coordinates
+        new_x_mins = centers[:, :, 0] - scaled_widths / 2
+        new_y_mins = centers[:, :, 1] - scaled_heights / 2
+        new_x_maxs = centers[:, :, 0] + scaled_widths / 2
+        new_y_maxs = centers[:, :, 1] + scaled_heights / 2
 
-                roi_indices[batch_idx].append((box_idx, scaled_x_min, scaled_y_min, scaled_x_max, scaled_y_max))
+        # Convert box coordinates to grid indices
+        roi_indices[:, :, 0] = torch.clamp((new_x_mins * self.num_anchors_x / feature_map_size[1]).int(), 0, self.num_anchors_x - 1)
+        roi_indices[:, :, 1] = torch.clamp((new_y_mins * self.num_anchors_y / feature_map_size[0]).int(), 0, self.num_anchors_y - 1)
+        roi_indices[:, :, 2] = torch.clamp((new_x_maxs * self.num_anchors_x / feature_map_size[1]).int(), 0, self.num_anchors_x - 1)
+        roi_indices[:, :, 3] = torch.clamp((new_y_maxs * self.num_anchors_y / feature_map_size[0]).int(), 0, self.num_anchors_y - 1)
 
         return roi_indices
 
