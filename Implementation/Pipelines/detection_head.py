@@ -17,7 +17,7 @@ class DetectionHead(nn.Module):
         self.num_anchors = num_anchors
         self.num_classes = num_classes
 
-        # Assuming 4 anchor boxes per cell
+        # Assuming 1 anchor boxes per cell
         self.loc_layer = nn.Conv2d(in_channels, num_anchors * 3, 1)
         self.size_layer = nn.Conv2d(in_channels, num_anchors * 3, 1)
         self.clf_layer = nn.Conv2d(in_channels, num_anchors * (num_classes + 1), 1) # +1 for confidence score
