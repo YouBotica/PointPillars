@@ -81,5 +81,5 @@ class PointPillarLoss(nn.Module):
 
         # Calculate regression loss:
         total_loss = self.beta_loc*total_loc_loss + self.beta_cls*(background_focal_loss + car_focal_loss)
-        
+
         return total_loss

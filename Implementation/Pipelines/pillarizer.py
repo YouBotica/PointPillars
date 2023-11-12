@@ -120,12 +120,8 @@ class Pillarization:
                 
                 count[x_ind, y_ind] += 1
 
-
         
-        #print(f'DONE')
-                
-        
-        # Limit the number of pillars:
+        ''' Limit the number of pillars '''
 
         # Flatten the count tensor and get the indices of the top P pillars
         flat_count = count.view(-1)  # Flatten the count tensor to 1D
