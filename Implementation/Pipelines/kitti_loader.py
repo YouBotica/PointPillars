@@ -42,7 +42,7 @@ class KITTIDataset(Dataset):
     
     
     def load_point_cloud_from_bin(self, bin_path):
-        print(f'File loaded: {bin_path}')
+        #print(f'File loaded: {bin_path}')
         with open(bin_path, 'rb') as f:
             content = f.read()
             point_cloud = np.frombuffer(content, dtype=np.float32)

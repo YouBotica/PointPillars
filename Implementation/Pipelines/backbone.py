@@ -29,6 +29,7 @@ class Block(nn.Module):
     def forward(self, x):
         return self.block(x)
 
+
 class UpSample(nn.Module):
     def __init__(self, in_channels, out_channels, stride, output_padding, device):
         super(UpSample, self).__init__()
@@ -42,6 +43,7 @@ class UpSample(nn.Module):
     
     def forward(self, x):
         return self.up(x)
+
 
 class BackBone(nn.Module):
     def __init__(self, in_channels, out_channels, device):

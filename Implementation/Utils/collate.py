@@ -11,6 +11,7 @@ import copy
 
 
 
+
 def normalize_annotations(annotations, pillar_size, x_lims, y_lims):
     # Extend num_attributes to store both original and normalized coordinates
     num_attributes = 14  # x, y, z, h, w, l, rotation_y (both original and normalized)
