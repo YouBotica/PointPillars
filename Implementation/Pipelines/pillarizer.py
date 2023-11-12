@@ -89,7 +89,7 @@ class Pillarization:
         self.y_indices = self.y_indices.int()
 
    
-        # TODO: Store points in the pillars in a vectorized way filling the pillars tensor (Note: Pretty sure there is a faster approach for this)     
+        # Store points in the pillars in a vectorized way filling the pillars tensor (Note: Pretty sure there is a faster approach for this)     
         for i in range(points.shape[0]): # FIXME: See if this -1 here is correct
             x_ind = self.x_indices[i]
             y_ind = self.y_indices[i]

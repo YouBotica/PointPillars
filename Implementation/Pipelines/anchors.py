@@ -209,6 +209,12 @@ class Anchor():
                         feature_map_x_idx = int(anchor_x_idx * scale_x)
                         feature_map_y_idx = int(anchor_y_idx * scale_y)
 
+                        if (feature_map_x_idx >= feature_map_size[1] or # HACK
+                            feature_map_y_idx >= feature_map_size[0] or 
+                            feature_map_y_idx <= 0.0 or feature_map_x_idx <= 0.0
+                            ):
+                            continue
+
                         # Classify as foreground or background based on IoU thresholds
                         #if iou_value >= foreground_threshold:
                             # Foreground target
@@ -218,8 +224,9 @@ class Anchor():
                             # Background target
                             class_label = 0
                             classification_targets[batch_idx].append((box_idx, feature_map_x_idx, feature_map_y_idx, class_label))
-
+            
         return classification_targets
+    
     
     
     def get_regression_targets_tensor(self, iou_tensor, feature_map_size, threshold=0.5):
