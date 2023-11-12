@@ -9,13 +9,15 @@ import pdb
 
 
 class PointPillarLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0, beta_loc = 2.0, beta_cls = 1.0):
+    def __init__(self, alpha=0.25, gamma=2.0, beta_loc = 2.0, beta_cls = 1.0, feature_map_size=(500,440)):
         super(PointPillarLoss, self).__init__()
         self.smooth_l1_loss = nn.SmoothL1Loss()
         self.alpha = alpha
         self.gamma = gamma
         self.beta_cls = beta_cls
         self.beta_loc = beta_loc
+        self.feature_map_size = feature_map_size
+
 
 
     def forward(self, regression_targets, classification_targets_dict, 
@@ -71,6 +73,11 @@ class PointPillarLoss(nn.Module):
 
                 x_idx = regression_targets[b, n, 0].long()  # Ensure the indices are long type
                 y_idx = regression_targets[b, n, 1].long()  # Ensure the indices are long type
+
+                if (x_idx >= self.feature_map_size[1] or y_idx >= self.feature_map_size[0]): 
+                    print(f'Exceeded an index, x_idx: {x_idx} and boundary: {self.feature_map_size[1]} or y_idx: {y_idx} and boundary: {self.feature_map_size[0]}')
+                    continue
+
                 x_pred[b, n] = loc[b, 0, 0, y_idx, x_idx]  # Indexing y first as it corresponds to H dimension
                 y_pred[b, n] = loc[b, 0, 1, y_idx, x_idx]  # Indexing y first as it corresponds to H dimension
                 w_gt = gt_boxes_tensor[b, n, 3] - gt_boxes_tensor[b, n, 1]
@@ -79,14 +86,12 @@ class PointPillarLoss(nn.Module):
                 y_gt = gt_boxes_tensor[b, n, 1] - l_gt/2
                 dx_tensor[b, n] = (x_gt - x_pred[b,n]) / da 
                 dy_tensor[b, n] = (y_gt - y_pred[b,n]) / da 
+
                 # Sizes:
                 if (w_gt != 0.0):
                     dw_tensor[b, n] = torch.log((w_gt / torch.abs(size[b, 0, 0, y_idx, x_idx])))
                 if (l_gt != 0.0):
                     dl_tensor[b, n] = torch.log((l_gt / torch.abs(size[b, 0, 1, y_idx, x_idx])))
-
-                #print(f'Added to dw: {dw_tensor[b, n]} its denominator was : {size[b, 0, 0, y_idx, x_idx]}')
-                #print(f'Added to dl: {dl_tensor[b, n]} its denominator was: {size[b, 0, 1, y_idx, x_idx]}')
 
                 # Classification loss for cars:
                 car_prob = clf[b, 0, 1, y_idx, x_idx]

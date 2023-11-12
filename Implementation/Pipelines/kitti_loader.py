@@ -25,7 +25,7 @@ class KITTIDataset(Dataset):
         
 
     def __len__(self):
-        return len(self.self.pointcloud_files)
+        return len(self.pointcloud_files)
     
 
     def __getitem__(self, idx):

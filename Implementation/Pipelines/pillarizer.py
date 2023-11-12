@@ -119,7 +119,7 @@ class Pillarization:
                     count[x_ind, y_ind] += 1
             except:
                 print(f'Exceeded count of size {count.size()} with indices x: {x_ind} y: {y_ind}')
-                pdb.set_trace()
+
         
         ''' Limit the number of pillars '''
 
@@ -158,7 +158,6 @@ class Pillarization:
 class PseudoImageDataset(Dataset):
     def __init__(self, pointcloud_dir, kitti_dataset, aug_dim, max_points_in_pillar, max_pillars, x_min, x_max, y_min, 
                     y_max, z_min, z_max, pillar_size, device='cpu', transform=None):
-        
         # Members of class:
         self.device = device
         self.kitti_dataset = kitti_dataset
@@ -189,22 +188,23 @@ class PseudoImageDataset(Dataset):
         return len(self.filenames)
 
     def __getitem__(self, idx):
-        point_cloud, label = self.kitti_dataset[idx] #.load_point_cloud_from_bin(os.path.join(self.pointcloud_dir, self.filenames[idx]))
-        pillars, x_orig_indices, y_orig_indices = self.pillarizer.make_pillars(point_cloud)
-        
-        # Apply linear activation, batchnorm, and ReLU for feature extraction from pillars tensor
-        features = self.feature_extractor(pillars) # Output of size (C,P)
-        
-        # Generate pseudo-image:
-        pseudo_image = torch.zeros(features.shape[0], self.pillarizer.num_y_pillars, self.pillarizer.num_x_pillars).to(self.device)
-        
-        # Scatter the features back to their original pillar locations
-        # Fill pseudo_image with features:
-        for c in range(features.shape[0]):
-            pseudo_image[c, y_orig_indices, x_orig_indices] = features[c]
-
-
-        if self.transform:
-            pseudo_image = self.transform(pseudo_image)
+        with torch.no_grad():
+            point_cloud, label = self.kitti_dataset[idx] #.load_point_cloud_from_bin(os.path.join(self.pointcloud_dir, self.filenames[idx]))
+            pillars, x_orig_indices, y_orig_indices = self.pillarizer.make_pillars(point_cloud)
             
-        return pseudo_image, label
+            # Apply linear activation, batchnorm, and ReLU for feature extraction from pillars tensor
+            features = self.feature_extractor(pillars) # Output of size (C,P)
+            
+            # Generate pseudo-image:
+            pseudo_image = torch.zeros(features.shape[0], self.pillarizer.num_y_pillars, self.pillarizer.num_x_pillars).to(self.device)
+            
+            # Scatter the features back to their original pillar locations
+            # Fill pseudo_image with features:
+            for c in range(features.shape[0]):
+                pseudo_image[c, y_orig_indices, x_orig_indices] = features[c]
+
+
+            if self.transform:
+                pseudo_image = self.transform(pseudo_image)
+                
+            return pseudo_image, label
