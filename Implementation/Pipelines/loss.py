@@ -75,7 +75,7 @@ class PointPillarLoss(nn.Module):
                 x_idx = regression_targets[b, n, 0].long()  # Ensure the indices are long type
                 y_idx = regression_targets[b, n, 1].long()  # Ensure the indices are long type
 
-                print(f'Adding {(y_idx, x_idx)} and boundaries {(self.feature_map_size[0], self.feature_map_size[1])}')
+
                 if (x_idx >= self.feature_map_size[1] or y_idx >= self.feature_map_size[0]): 
                     print(f'Exceeded an index, x_idx: {x_idx} and boundary: {self.feature_map_size[1]} or y_idx: {y_idx} and boundary: {self.feature_map_size[0]}')
                     continue

@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from mpl_toolkits.mplot3d import Axes3D
 import torch.nn as nn
+from torch.optim.lr_scheduler import StepLR
+
 import time
 import random
 import copy
@@ -91,31 +93,46 @@ print(f'Can I can use GPU now? -- {torch.cuda.is_available()}')
 small_train_pointclouds_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_train_velodyne'
 small_train_labels_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_labels_velodyne'
 
+small_validation_pointclouds_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_validation_velodyne'
+small_validation_labels_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_validation_labels'
+
 
 
 # IMPORTANT: Set to CPU for pillarization otherwise, expect GPU memory to overflow
 device =  torch.device('cpu')
 
 train_set = KITTIDataset(pointcloud_dir=small_train_pointclouds_dir, labels_dir=small_train_labels_dir)
+val_set = KITTIDataset(pointcloud_dir=small_validation_pointclouds_dir, labels_dir=small_validation_labels_dir)
         
+
 # Create the dataset and DataLoader
-dataset = PseudoImageDataset(pointcloud_dir=small_train_pointclouds_dir, device=device, kitti_dataset=train_set, aug_dim=AUG_DIM, max_points_in_pillar=MAX_POINTS_PER_PILLAR,
+train_dataset = PseudoImageDataset(pointcloud_dir=small_train_pointclouds_dir, device=device, kitti_dataset=train_set, aug_dim=AUG_DIM, max_points_in_pillar=MAX_POINTS_PER_PILLAR,
                              max_pillars=MAX_FILLED_PILLARS, x_min=X_MIN, y_min=Y_MIN, z_min=Z_MIN, x_max = X_MAX, y_max=Y_MAX,
                              z_max = Z_MAX, pillar_size=PILLAR_SIZE)
 
-train_loader = DataLoader(dataset, batch_size=4, shuffle=False, collate_fn=collate_batch)
+val_dataset = PseudoImageDataset(pointcloud_dir=small_validation_pointclouds_dir, device=device, kitti_dataset=train_set, aug_dim=AUG_DIM, max_points_in_pillar=MAX_POINTS_PER_PILLAR,
+                             max_pillars=MAX_FILLED_PILLARS, x_min=X_MIN, y_min=Y_MIN, z_min=Z_MIN, x_max = X_MAX, y_max=Y_MAX,
+                             z_max = Z_MAX, pillar_size=PILLAR_SIZE)
 
+
+train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=collate_batch)
+val_loader = DataLoader(val_dataset, batch_size=4, shuffle=True, collate_fn=collate_batch)
 
 
 '''Start training loop'''
 n_epochs = 7
 model = PointPillarsModel()
 loss_fn = PointPillarLoss(feature_map_size=(H, W))
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+
+# Creates a learning rate scheduler that decays the learning rate every 15 epochs
+lr_scheduler = StepLR(optimizer, step_size=15, gamma=0.8)
+
 loss = 0.0
 
 # Define a path to save the model
-model_save_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/model_checkpoint.pth"
+model_save_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/model_checkpoint2.pth"
 
 for epoch in range(n_epochs):
     
@@ -124,10 +141,9 @@ for epoch in range(n_epochs):
     model.train()
     
     for batch_idx, (pseudo_images, batched_labels) in enumerate(train_loader):
-        
+        model.train()
         # Start timer:
         start_time = time.time()
-
 
         gt_boxes_tensor = create_boxes_tensor(batched_labels, attributes_idx)
         
@@ -191,10 +207,44 @@ for epoch in range(n_epochs):
 
         if epoch % 2 == 0:
             continue
-
-        # TODO: Add validation here:
-        model.eval()
-        print(f'Entering in evaluation mode: ')
         
+        '''Do a validation with a few batches'''
 
+        model.eval()
+        print(f'WARNING: Entering evaluation mode')
+        
         start_time = time.time()
+        with torch.no_grad():
+            for batch_idx_val, (pseudo_images_val, batched_labels_val) in enumerate(val_loader):
+
+                if (batch_idx >= 2): # Break after 5 batches to avoid going over the full validation set
+                    break
+
+                gt_boxes_tensor_val = create_boxes_tensor(batched_labels_val, attributes_idx)
+        
+                # Check if gt_boxes_tensor is empty for the current batch
+                if gt_boxes_tensor_val.nelement() == 0:
+                    print(f'Encountered an empty element on the batch')
+                    continue
+
+
+                # Get IoU tensor and regression targets:
+                iou_tensor_val = anchor.calculate_batch_iou(gt_boxes_tensor_val) 
+                '''IoU tensor (batch_size, n_boxes, num_anchors_x, num_anchors_y)'''
+
+                # Regression targets from ground truth labels
+                regression_targets_tensor_val = anchor.get_regression_targets_tensor(iou_tensor_val, (H,W), threshold=0.5)
+
+                # Classification targets:
+                classification_targets_dict_val = anchor.get_classification_targets(iou_tensor=iou_tensor_val, feature_map_size=(H,W),
+                                            background_lower_threshold=0.05, background_upper_threshold=0.25)
+                
+                loc_val, size_val, clf_val, occupancy_val, angle_val, heading_val = model(pseudo_images_val)
+    
+                loss_val = loss_fn(regression_targets=regression_targets_tensor_val, classification_targets_dict=classification_targets_dict_val,
+                gt_boxes_tensor = gt_boxes_tensor_val, loc=loc_val, size=size_val, clf=clf_val, 
+                occupancy=occupancy_val, angle=angle_val, heading=heading_val, anchor=anchor)
+
+                print(f'Validating with batch {batch_idx_val}, got loss: {loss_val}')
+
+    lr_scheduler.step()
