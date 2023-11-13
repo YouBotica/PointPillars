@@ -9,7 +9,7 @@ import pdb
 
 
 class PointPillarLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0, beta_loc = 2.0, beta_cls = 1.0, feature_map_size=(500,440)):
+    def __init__(self, alpha=0.25, gamma=2.0, beta_loc = 2.0, beta_cls = 1.0, feature_map_size=(500, 440)):
         super(PointPillarLoss, self).__init__()
         self.smooth_l1_loss = nn.SmoothL1Loss()
         self.alpha = alpha
@@ -17,6 +17,7 @@ class PointPillarLoss(nn.Module):
         self.beta_cls = beta_cls
         self.beta_loc = beta_loc
         self.feature_map_size = feature_map_size
+        print(f'First element: {feature_map_size[0]}, second element: {feature_map_size[1]}')
 
 
 
@@ -74,6 +75,7 @@ class PointPillarLoss(nn.Module):
                 x_idx = regression_targets[b, n, 0].long()  # Ensure the indices are long type
                 y_idx = regression_targets[b, n, 1].long()  # Ensure the indices are long type
 
+                print(f'Adding {(y_idx, x_idx)} and boundaries {(self.feature_map_size[0], self.feature_map_size[1])}')
                 if (x_idx >= self.feature_map_size[1] or y_idx >= self.feature_map_size[0]): 
                     print(f'Exceeded an index, x_idx: {x_idx} and boundary: {self.feature_map_size[1]} or y_idx: {y_idx} and boundary: {self.feature_map_size[0]}')
                     continue

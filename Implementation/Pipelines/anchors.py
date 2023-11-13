@@ -210,9 +210,8 @@ class Anchor():
                         feature_map_y_idx = int(anchor_y_idx * scale_y)
 
                         if (feature_map_x_idx >= feature_map_size[1] or # HACK
-                            feature_map_y_idx >= feature_map_size[0] or 
-                            feature_map_y_idx <= 0.0 or feature_map_x_idx <= 0.0
-                            ):
+                            feature_map_y_idx >= feature_map_size[0]):                       
+                            print(f'Dropped invalid indices on regression targets x: {feature_map_x_idx} and y: {feature_map_y_idx}')
                             continue
 
                         # Classify as foreground or background based on IoU thresholds
@@ -258,11 +257,15 @@ class Anchor():
                 # Find the max IoU and its index
                 max_iou = torch.max(box_iou)
                 max_idx = torch.argmax(box_iou)
-                max_x_idx, max_y_idx = np.unravel_index(max_idx.item(), (num_anchors_x, num_anchors_y))
+                max_x_idx, max_y_idx = np.unravel_index(max_idx.item(), (num_anchors_x, num_anchors_y)) # BUG: Are x and y swapped here?
 
                 # Scale anchor indices to feature map indices
                 feature_map_x_idx = int(max_x_idx * scale_x) 
                 feature_map_y_idx = int(max_y_idx * scale_y)
+
+                if (feature_map_x_idx >= feature_map_w or feature_map_y_idx >= feature_map_h):
+                    print(f'Dropped invalid indices on regression targets x: {feature_map_x_idx} and y: {feature_map_y_idx}')
+                    continue
                 
                 # Check if the max IoU is above the threshold
                 if max_iou >= threshold:
@@ -275,56 +278,7 @@ class Anchor():
                     regression_targets_tensor[batch_idx, box_idx, 1] = feature_map_y_idx
 
         return regression_targets_tensor
-    
-
-    def get_regression_targets(self, iou_tensor, feature_map_size, threshold=0.5):
-        """
-        This method finds the best anchor match for each ground truth box based on the IoU tensor.
-        It returns the indices on the feature map grid for anchors with the highest IoU above the threshold.
-        If no IoU exceeds the threshold, the indices of the anchor with the highest IoU are selected.
-
-        Parameters:
-        iou_tensor -- tensor of IoU values, shape (batch_size, n_boxes, num_anchors_x, num_anchors_y)
-        feature_map_size -- size of the feature map grid (H, W)
-        threshold -- IoU threshold to consider for positive anchor matching
-
-        Returns:
-        A dictionary with keys as batch indices and values as lists of (box_index, feature_map_x_index, feature_map_y_index)
-        A tensor of size (batch_size, n_boxes, 2)
-        """
-        batch_size, n_boxes, num_anchors_x, num_anchors_y = iou_tensor.shape
-        feature_map_h, feature_map_w = feature_map_size
-        scale_x = feature_map_w / num_anchors_x
-        scale_y = feature_map_h / num_anchors_y
-        regression_targets = {batch_idx: [] for batch_idx in range(batch_size)}
-
-        # Iterate through each batch and each ground truth box
-        for batch_idx in range(batch_size):
-            for box_idx in range(n_boxes):
-                # Get the IoU for the current box
-                box_iou = iou_tensor[batch_idx, box_idx]
-
-                # Find the max IoU and its index
-                max_iou = torch.max(box_iou)
-                max_idx = torch.argmax(box_iou)
-                anchor_x_idx, anchor_y_idx = np.unravel_index(max_idx.item(), (num_anchors_x, num_anchors_y))
-
-                # Scale anchor indices to feature map indices
-                feature_map_x_idx = int(anchor_x_idx * scale_x) # FIXME: Fix offsets
-                feature_map_y_idx = int(anchor_y_idx * scale_y)
-
-                if max_iou >= threshold:
-                    # If max IoU is above the threshold, use it as the target
-                    regression_targets[batch_idx].append((box_idx, feature_map_x_idx, feature_map_y_idx))
-                else:
-                    # If no IoU exceeds the threshold, take the anchor with the highest IoU
-                    regression_targets[batch_idx].append((box_idx, feature_map_x_idx, feature_map_y_idx))
-
-        '''regression_targets_tensor (bs, n_boxes, 2)'''
-        return regression_targets
-    
-    
-    
+        
 
     def get_ROI_indices(self, gt_boxes_tensor, feature_map_size, scale_factor):
         """

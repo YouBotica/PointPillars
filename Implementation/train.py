@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from mpl_toolkits.mplot3d import Axes3D
 import torch.nn as nn
+import time
 import random
 import copy
 import math
@@ -109,27 +110,24 @@ train_loader = DataLoader(dataset, batch_size=4, shuffle=False, collate_fn=colla
 '''Start training loop'''
 n_epochs = 7
 model = PointPillarsModel()
-loss_fn = PointPillarLoss()
+loss_fn = PointPillarLoss(feature_map_size=(H, W))
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss = 0.0
 
+# Define a path to save the model
+model_save_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/model_checkpoint.pth"
+
 for epoch in range(n_epochs):
-    print(f'Epoch: {epoch}')
-
-    # Reset Kitti dataset indexer that retrieves pointclouds and labels:
-    train_set = KITTIDataset(pointcloud_dir=small_train_pointclouds_dir, labels_dir=small_train_labels_dir)
-
-    dataset = PseudoImageDataset(pointcloud_dir=small_train_pointclouds_dir, device=device, kitti_dataset=train_set, aug_dim=AUG_DIM, max_points_in_pillar=MAX_POINTS_PER_PILLAR,
-                             max_pillars=MAX_FILLED_PILLARS, x_min=X_MIN, y_min=Y_MIN, z_min=Z_MIN, x_max = X_MAX, y_max=Y_MAX,
-                             z_max = Z_MAX, pillar_size=PILLAR_SIZE)
     
-    train_loader = DataLoader(dataset, batch_size=4, shuffle=True, collate_fn=collate_batch)
-    
-
+    print(f'Epoch: {epoch}')    
     '''Enable training mode'''
     model.train()
-
+    
     for batch_idx, (pseudo_images, batched_labels) in enumerate(train_loader):
+        
+        # Start timer:
+        start_time = time.time()
+
 
         gt_boxes_tensor = create_boxes_tensor(batched_labels, attributes_idx)
         
@@ -154,6 +152,11 @@ for epoch in range(n_epochs):
         classification_targets_dict = anchor.get_classification_targets(iou_tensor=iou_tensor, feature_map_size=(H,W),
                                     background_lower_threshold=0.05, background_upper_threshold=0.25)
         
+
+        # FIXME: The visualization is just for debugging purposes:
+        #visualize_batch_bounding_boxes(feature_maps=pseudo_images, boxes_tensor=gt_boxes_tensor, 
+        #                attributes_idx=attributes_idx, visz_anchor=True, anchor=anchor)
+        
         '''Enable gradients'''
         optimizer.zero_grad()
 
@@ -164,10 +167,34 @@ for epoch in range(n_epochs):
         gt_boxes_tensor = gt_boxes_tensor, loc=loc, size=size, clf=clf, occupancy=occupancy, angle=angle, heading=heading,
         anchor=anchor)
 
-        print(f'Loss: {loss}')
-        print(f'Epoch: {epoch}')
-        print(f'Batch: {batch_idx}')
 
         # Backpropagation
         loss.backward()
         optimizer.step()
+
+        end_time = time.time()  # End time of the batch
+        elapsed_time = end_time - start_time
+
+        print(f'Epoch: {epoch}, batch: {batch_idx}, loss: {loss}, elapsed: {elapsed_time}')
+
+
+        # Save model every 15 batches:
+        if batch_idx % 15 == 0:
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': loss,
+            }, model_save_path)
+            print(f"Model saved to {model_save_path}")
+
+
+        if epoch % 2 == 0:
+            continue
+
+        # TODO: Add validation here:
+        model.eval()
+        print(f'Entering in evaluation mode: ')
+        
+
+        start_time = time.time()
