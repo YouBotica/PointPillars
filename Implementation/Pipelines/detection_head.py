@@ -18,12 +18,12 @@ class DetectionHead(nn.Module):
         self.num_classes = num_classes
 
         # Assuming 1 anchor boxes per cell
-        self.loc_layer = nn.Conv2d(in_channels, num_anchors * 3, 1)
-        self.size_layer = nn.Conv2d(in_channels, num_anchors * 3, 1)
-        self.clf_layer = nn.Conv2d(in_channels, num_anchors * (num_classes + 1), 1) # +1 for confidence score
-        self.occupancy_layer = nn.Conv2d(in_channels, num_anchors * 1, 1)
-        self.angle_layer = nn.Conv2d(in_channels, num_anchors * 1, 1)
-        self.heading_layer = nn.Conv2d(in_channels, num_anchors * 1, 1)
+        self.loc_layer = nn.Conv2d(in_channels, num_anchors * 3, 1, device=device)
+        self.size_layer = nn.Conv2d(in_channels, num_anchors * 3, 1, device=device)
+        self.clf_layer = nn.Conv2d(in_channels, num_anchors * (num_classes + 1), 1, device=device) # +1 for confidence score
+        self.occupancy_layer = nn.Conv2d(in_channels, num_anchors * 1, 1, device=device)
+        self.angle_layer = nn.Conv2d(in_channels, num_anchors * 1, 1, device=device)
+        self.heading_layer = nn.Conv2d(in_channels, num_anchors * 1, 1, device=device)
 
 
     def forward(self, x):

@@ -20,17 +20,29 @@ class PillarFeatureNet(nn.Module):
 
     
     def forward(self, x):
-        # Input x is of shape (D, P, N)
-        # Convert it to (P, D, N) for 1x1 convolution      
+ 
+        # Input x is of shape (bs, D, P, N)
         x = x.to(self.device)
-        x = x.permute(1, 0, 2)
+        batch_size, D, P, N = x.shape
+
+        # Prepare for 1d convolution (flatten so we can convolve :))
+        x = x.view(batch_size, D, -1)  # Now x is of shape (bs, D, P*N)
+        
+        # Move features to the channel dimension for Conv1d
+
+        # Apply the convolution
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        # Max pooling operation over the points' dimension
-        x, _ = torch.max(x, dim=2)  # Output shape: (P, C)
-        return x.T  # Output shape: (C, P)
+        
 
+        # Reshape back to separate P and N dimensions and max pool over the N dimension
+        x = x.view(batch_size, -1, P, N)
+        x, _ = torch.max(x, dim=3)  # Output shape: (bs, out_channels, P)
+
+        # Permute back to the original dimension order
+        #x = x  .permute(0, 2, 1)  # Output shape: (bs, P, out_channels)
+        return x
 
 
 class Pillarization:
@@ -89,7 +101,7 @@ class Pillarization:
         self.y_indices = self.y_indices.int()
 
    
-        # Store points in the pillars in a vectorized way filling the pillars tensor (Note: Pretty sure there is a faster approach for this)     
+        # Store points in the pillars in a vectorized way filling the pillars tensor (NOTE: Pretty sure there is a faster approach for this)     
         for i in range(points.shape[0]): # FIXME: See if this -1 here is correct
             x_ind = self.x_indices[i]
             y_ind = self.y_indices[i]
@@ -174,15 +186,19 @@ class PseudoImageDataset(Dataset):
         self.pointcloud_dir = pointcloud_dir
         self.transform = transform
         
-        # Get pointcloud filenames in specified directory: 
+        # Get pointcloud filenames in specified directory: And my
         self.filenames = [f for f in os.listdir(self.pointcloud_dir) if os.path.isfile(os.path.join(self.pointcloud_dir, f))]
         
         
         self.pillarizer = Pillarization(device=self.device, aug_dim=self.aug_dim, x_min=self.x_min, x_max=self.x_max, y_min=self.y_min, y_max=40.0, 
                                         z_min=self.z_min, z_max=self.z_max, pillar_size=self.pillar_size, 
                                         max_points_per_pillar=self.max_points_in_pillar, max_pillars=self.max_pillars)
-
-        self.feature_extractor = PillarFeatureNet(in_channels=self.aug_dim, out_channels=64, device=self.device) # Size (C,P) 
+    
+    def get_indices(self):
+        return self.x_orig_indices, self.y_orig_indices
+    
+    def get_pillarizer(self):
+        return self.pillarizer
 
     def __len__(self):
         return len(self.filenames)
@@ -190,21 +206,9 @@ class PseudoImageDataset(Dataset):
     def __getitem__(self, idx):
         with torch.no_grad():
             point_cloud, label = self.kitti_dataset[idx] #.load_point_cloud_from_bin(os.path.join(self.pointcloud_dir, self.filenames[idx]))
-            pillars, x_orig_indices, y_orig_indices = self.pillarizer.make_pillars(point_cloud)
             
-            # Apply linear activation, batchnorm, and ReLU for feature extraction from pillars tensor
-            features = self.feature_extractor(pillars) # Output of size (C,P)
-            
-            # Generate pseudo-image:
-            pseudo_image = torch.zeros(features.shape[0], self.pillarizer.num_y_pillars, self.pillarizer.num_x_pillars).to(self.device)
-            
-            # Scatter the features back to their original pillar locations
-            # Fill pseudo_image with features:
-            for c in range(features.shape[0]):
-                pseudo_image[c, y_orig_indices, x_orig_indices] = features[c]
+            pillars, self.x_orig_indices, self.y_orig_indices = self.pillarizer.make_pillars(point_cloud) 
 
+            return pillars, label, self.x_orig_indices, self.y_orig_indices
+        
 
-            if self.transform:
-                pseudo_image = self.transform(pseudo_image)
-                
-            return pseudo_image, label

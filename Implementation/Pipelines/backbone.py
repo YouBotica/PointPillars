@@ -12,21 +12,24 @@ class Block(nn.Module):
     def __init__(self, in_channels, out_channels, L, stride, device):
         super(Block, self).__init__()
         self.to(device)
+
+        self.device = device
         layers = []
         # First layer with the specified stride
-        layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1))
-        layers.append(nn.BatchNorm2d(out_channels))
+        layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, device=device))
+        layers.append(nn.BatchNorm2d(out_channels, device=device))
         layers.append(nn.ReLU(inplace=True))
         
         # Subsequent layers with stride 1
         for _ in range(1, L):
-            layers.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1))
-            layers.append(nn.BatchNorm2d(out_channels))
+            layers.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, device=device))
+            layers.append(nn.BatchNorm2d(out_channels, device=device))
             layers.append(nn.ReLU(inplace=True))
         
         self.block = nn.Sequential(*layers)
     
     def forward(self, x):
+        x.to(self.device)
         return self.block(x)
 
 
@@ -36,8 +39,8 @@ class UpSample(nn.Module):
         # Assuming stride_out is always half of stride_in based on the diagram
         self.to(device)
         self.up = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, output_padding=output_padding),
-            nn.BatchNorm2d(out_channels), 
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, output_padding=output_padding, device=device),
+            nn.BatchNorm2d(out_channels, device=device), 
             nn.ReLU(inplace=True)
         )
     
@@ -66,7 +69,7 @@ class BackBone(nn.Module):
         x1 = self.block1(x)
         x2 = self.block2(x1)
         x3 = self.block3(x2)
-        x2.size()
+        #x2.size()
         # Upsample and concatenate
         up_x1 = self.up1(x1)   
         up_x2 = self.up2(x2)

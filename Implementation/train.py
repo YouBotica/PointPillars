@@ -78,12 +78,23 @@ anchor.create_anchors()
 
 # Create a collate function to handle variable-sized labels:
 def collate_batch(batch):
+    pillar_features, annotations, x_orig_indices, y_orig_indices = zip(*batch)
+    pillar_features = torch.stack(pillar_features, dim=0)
+    # x_orig_indices and y_orig_indices are tuples of tensors, you might need to stack them too if they are not already batched
+    x_orig_indices = torch.stack(x_orig_indices, dim=0)
+    y_orig_indices = torch.stack(y_orig_indices, dim=0)
+    normalized_annotations = normalize_annotations(annotations, pillar_size=PILLAR_SIZE,
+        x_lims=(X_MIN, X_MAX), y_lims=(Y_MIN, Y_MAX))
+    
+    return pillar_features, normalized_annotations, x_orig_indices, y_orig_indices
+
+'''def collate_batch(batch):
     point_clouds, annotations = zip(*batch)
     point_clouds = torch.stack(point_clouds, dim=0)
     normalized_annotations = normalize_annotations(annotations, pillar_size=PILLAR_SIZE,
         x_lims=(X_MIN, X_MAX), y_lims=(Y_MIN, Y_MAX))
     
-    return point_clouds, normalized_annotations
+    return point_clouds, normalized_annotations'''
 
 
 print(f'Can I can use GPU now? -- {torch.cuda.is_available()}')
@@ -115,13 +126,13 @@ val_dataset = PseudoImageDataset(pointcloud_dir=small_validation_pointclouds_dir
                              z_max = Z_MAX, pillar_size=PILLAR_SIZE)
 
 
-train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=collate_batch)
+train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=collate_batch) # FIXME: Change back to 4
 val_loader = DataLoader(val_dataset, batch_size=4, shuffle=True, collate_fn=collate_batch)
 
 
 '''Start training loop'''
 n_epochs = 7
-model = PointPillarsModel()
+model = PointPillarsModel(device=torch.device('cuda'), aug_dim=AUG_DIM)
 loss_fn = PointPillarLoss(feature_map_size=(H, W))
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -139,12 +150,11 @@ for epoch in range(n_epochs):
     print(f'Epoch: {epoch}')    
     '''Enable training mode'''
     model.train()
-    
-    for batch_idx, (pseudo_images, batched_labels) in enumerate(train_loader):
+    for batch_idx, (pillar_features, batched_labels, x_orig_indices, y_orig_indices) in enumerate(train_loader):
         model.train()
         # Start timer:
         start_time = time.time()
-
+        #pdb.set_trace()
         gt_boxes_tensor = create_boxes_tensor(batched_labels, attributes_idx)
         
         # Check if gt_boxes_tensor is empty for the current batch
@@ -169,14 +179,15 @@ for epoch in range(n_epochs):
                                     background_lower_threshold=0.05, background_upper_threshold=0.25)
         
 
-        # FIXME: The visualization is just for debugging purposes:
+        # The visualization is just for debugging purposes:
         #visualize_batch_bounding_boxes(feature_maps=pseudo_images, boxes_tensor=gt_boxes_tensor, 
         #                attributes_idx=attributes_idx, visz_anchor=True, anchor=anchor)
         
         '''Enable gradients'''
         optimizer.zero_grad()
 
-        loc, size, clf, occupancy, angle, heading = model(pseudo_images)
+        loc, size, clf, occupancy, angle, heading = model(x=pillar_features, x_orig_indices=x_orig_indices, 
+                        y_orig_indices=y_orig_indices, pillarizer=train_dataset.pillarizer)
 
         
         loss = loss_fn(regression_targets=regression_targets_tensor, classification_targets_dict=classification_targets_dict,
