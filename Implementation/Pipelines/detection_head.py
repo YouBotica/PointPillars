@@ -10,6 +10,7 @@ import pdb
 class DetectionHead(nn.Module):
     def __init__(self, in_channels, grid_size_x, grid_size_y, num_anchors, num_classes, device):
         super(DetectionHead, self).__init__()
+        
         self.device = device
         self.to(self.device) # Send model to GPU
         self.grid_size_x = grid_size_x
@@ -24,12 +25,14 @@ class DetectionHead(nn.Module):
         self.occupancy_layer = nn.Conv2d(in_channels, num_anchors * 1, 1, device=device)
         self.angle_layer = nn.Conv2d(in_channels, num_anchors * 1, 1, device=device)
         self.heading_layer = nn.Conv2d(in_channels, num_anchors * 1, 1, device=device)
+        self.relu = nn.ReLU()
 
 
     def forward(self, x):
+
         x.to(self.device)
         loc = self.loc_layer(x).view(x.size(0), self.num_anchors, 3, self.grid_size_x, self.grid_size_y)
-        size = self.size_layer(x).view(x.size(0), self.num_anchors, 3, self.grid_size_x, self.grid_size_y)
+        size = self.relu(self.size_layer(x).view(x.size(0), self.num_anchors, 3, self.grid_size_x, self.grid_size_y))
 
         clf = torch.sigmoid(self.clf_layer(x)).view(x.size(0), 
                 self.num_anchors, self.num_classes + 1, self.grid_size_x, self.grid_size_y)

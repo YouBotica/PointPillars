@@ -60,7 +60,7 @@ class PointPillarLoss(nn.Module):
                 background_focal_loss += -torch.log(clf_val)*self.alpha*(1 - clf_val)**self.gamma
                 n_classification_target += 1
 
-        if batch_size*n_boxes != 0.0:
+        if n_classification_target != 0.0:
             background_focal_loss /= n_classification_target
         else:
             background_focal_loss = 0.0
@@ -90,10 +90,14 @@ class PointPillarLoss(nn.Module):
                 dy_tensor[b, n] = (y_gt - y_pred[b,n]) / da 
 
                 # Sizes:
+                epsilon = 1e-6
+                #print(f'Size 0: {(size[b, 0, 0, y_idx, x_idx] + epsilon)}')
+    
+
                 if (w_gt != 0.0):
-                    dw_tensor[b, n] = torch.log((w_gt / torch.abs(size[b, 0, 0, y_idx, x_idx])))
+                    dw_tensor[b, n] = torch.log((w_gt / (size[b, 0, 0, y_idx, x_idx] + epsilon)))
                 if (l_gt != 0.0):
-                    dl_tensor[b, n] = torch.log((l_gt / torch.abs(size[b, 0, 1, y_idx, x_idx])))
+                    dl_tensor[b, n] = torch.log((l_gt / (size[b, 0, 1, y_idx, x_idx] + epsilon)))
 
                 # Classification loss for cars:
                 car_prob = clf[b, 0, 1, y_idx, x_idx]

@@ -13,7 +13,6 @@ import time
 import random
 import copy
 import math
-import ipdb
 import h5py
 from tqdm import tqdm
 
@@ -54,8 +53,6 @@ ANCHORS = torch.tensor([[3.9, 1.6, 1.56, -1, 0], # Anchors as tensor: (height, w
                        [0.6, 0.8, 1.73, -0.6, 1.5708]]
                        )
 
-mapped_anchors = ANCHORS.detach().clone()
-mapped_anchors[:,0:2] /= PILLAR_SIZE[0]
 
 
 # Define a dictionary to map attributes to their indices
@@ -68,10 +65,46 @@ attributes_idx = {
     'norm_l': 12,
 }
 
-# Create an anchor: 
-anchor = Anchor(width=mapped_anchors[0][1], height=mapped_anchors[0][1]) # TODO: Add more anchors for better learning
-anchor.create_anchor_grid(H,W) # Creates grid
-anchor.create_anchors()
 
 
-print(f'Can I can use GPU now? -- {torch.cuda.is_available()}')
+# Converter from pointcloud to pillars representation:
+
+small_train_pointclouds_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_train_velodyne'
+small_train_labels_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_labels_velodyne'
+
+mini_train_pointclouds_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/mini_train_velodyne'
+mini_train_labels_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/mini_label_velodyne'
+
+device =  torch.device('cpu') # CPU should be used for pillarization
+
+train_set = KITTIDataset(pointcloud_dir=small_train_pointclouds_dir, labels_dir=small_train_labels_dir)
+pillarizer = Pillarization(device=device, aug_dim=AUG_DIM, x_min=X_MIN, x_max=X_MAX, y_min=Y_MIN, y_max=Y_MAX, 
+                                z_min=Z_MIN, z_max=Z_MAX, pillar_size=PILLAR_SIZE, 
+                                max_points_per_pillar=MAX_POINTS_PER_PILLAR, max_pillars=MAX_FILLED_PILLARS)
+
+
+
+# We'll save the data in an HDF5 file
+with h5py.File('/media/adlink/6a738988-44b7-4696-ba07-3daeb00e5683/kitti_pillars/pillar_data.h5', 'w') as h5f:
+    # Iterate through all point clouds in the dataset
+    for idx in tqdm(range(len(train_set))):
+        # Get the point cloud and corresponding label
+        point_cloud, label = train_set[idx]
+
+        label_as_tensor = normalize_annotations(annotations=label, pillar_size=PILLAR_SIZE,  # FIXME: ADD A RETURN STATEMENT
+                x_lims=(X_MIN, X_MAX), y_lims=(Y_MIN, Y_MAX))
+        
+        # Pillarize the point cloud
+        pillars, x_indices, y_indices = pillarizer.make_pillars(point_cloud)
+        
+        # Unbatch to store locally:
+        pillars = pillars.squeeze(0) 
+        x_indices = x_indices.squeeze(0)
+        y_indices = y_indices.squeeze(0)
+        
+        # Convert to numpy and write to HDF5
+        grp = h5f.create_group(f'point_cloud_{idx}')
+        grp.create_dataset('pillars', data=pillars.numpy())
+        grp.create_dataset('x_indices', data=x_indices.numpy())
+        grp.create_dataset('y_indices', data=y_indices.numpy())
+        grp.create_dataset('label', data=label_as_tensor.numpy()) 
