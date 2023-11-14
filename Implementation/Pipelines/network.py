@@ -22,7 +22,7 @@ class PointPillarsModel(nn.Module):
                 num_classes=2, device=torch.device('cuda'))
         
 
-    def forward(self, x, x_orig_indices, y_orig_indices, pillarizer):   
+    def forward(self, x, x_orig_indices, y_orig_indices, num_x_pillars, num_y_pillars):   
         '''Forward pass through pillar feature net, backbone and detection head: '''
         '''
         Inputs: 
@@ -37,7 +37,7 @@ class PointPillarsModel(nn.Module):
         bs, num_channels, num_pillars = features.size()
 
         # Generate pseudo-image:
-        pseudo_images = torch.zeros(bs, num_channels, pillarizer.num_y_pillars, pillarizer.num_x_pillars).to(self.device) # (bs, C, num_y, num_x)
+        pseudo_images = torch.zeros(bs, num_channels, num_y_pillars, num_x_pillars).to(self.device) # (bs, C, num_y, num_x)
 
 
         for b in range(bs):
@@ -49,8 +49,8 @@ class PointPillarsModel(nn.Module):
             cur_features = features[b]  # Size (C, P)
 
             # The indices must be in the range [0, num_pillars-1], so we might need to clamp them
-            cur_x_indices = torch.clamp(cur_x_indices, 0, pillarizer.num_x_pillars - 1)
-            cur_y_indices = torch.clamp(cur_y_indices, 0, pillarizer.num_y_pillars - 1)
+            cur_x_indices = torch.clamp(cur_x_indices, 0, num_x_pillars - 1)
+            cur_y_indices = torch.clamp(cur_y_indices, 0, num_y_pillars - 1)
 
             # Expand the indices to match the features dimensions
             cur_x_indices = cur_x_indices.unsqueeze(0).expand(num_channels, -1)
@@ -68,4 +68,4 @@ class PointPillarsModel(nn.Module):
         backbone_out = self.backbone(pseudo_images)
         loc, size, clf, occupancy, angle, heading = self.detection_head(backbone_out)
 
-        return loc, size, clf, occupancy, angle, heading
+        return loc, size, clf, occupancy, angle, heading, pseudo_images, backbone_out

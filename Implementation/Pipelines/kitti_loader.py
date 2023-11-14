@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import torch.nn as nn
 import random
+import h5py
 
 
 class KITTIDataset(Dataset):
@@ -91,3 +92,21 @@ class KITTIDataset(Dataset):
 
 
         return labels
+
+class HDF5PillarDataset(Dataset):
+    def __init__(self, h5_file):
+        self.h5_file = h5_file
+        self.length = len(h5py.File(h5_file, 'r'))
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        with h5py.File(self.h5_file, 'r') as h5f:
+            grp = h5f[f'point_cloud_{idx}']
+            pillars = torch.from_numpy(grp['pillars'][:])
+            x_indices = torch.from_numpy(grp['x_indices'][:])
+            y_indices = torch.from_numpy(grp['y_indices'][:])
+            label = grp['label'][:]  # If the label is not a tensor, no need for torch.from_numpy
+        return pillars, label, x_indices, y_indices
+
