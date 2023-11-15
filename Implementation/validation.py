@@ -116,20 +116,26 @@ loss_fn = PointPillarLoss(feature_map_size=(H, W))
 loss = 0.0
 
 
-# TODO: Create an mAP function:
-'''def get_mAP_metric(pred_objects_locations, predicted_target, clf):
-
+# TODO: Create an mAP function: 
+def get_mAP_metric(gt_boxes_tensor, predicted_target_locations, clf):
+    '''
     gt_boxes_tensor -- size (bs, max_gt_boxes, 4) where the 4 is (x1, y1, x2, y2)
     predicted_targets -- size (bs, n_boxes, 2) where the 2 is (x_idx, y_idx)
     clf -- size (bs, n_anchors, n_classes+1, H, W)
-
+    '''
 
     # TODO: Compare each predicted_object's class 
 
     # Get predicted class:
-    pred_objects_locations[:, : ,]'''
+    x_idxs = predicted_target_locations[:, : ,0].long() # 0 is x, 1 is y
+    y_idxs = predicted_target_locations[:, : ,1].long()
+    
+    # Batch indices
+    bs, n_anchors, n_classes_plus_1, H, W = clf.size()
+    batch_indices = torch.arange(bs).view(-1, 1, 1, 1, 1) # To match clf dimensions
 
-
+    # Use indexing to get the predicted class scores at the specified indices
+    predicted_scores = clf[batch_indices, :, 1, y_idxs, x_idxs]
 
 
 
@@ -176,7 +182,7 @@ with torch.no_grad():
                             anchor=anchor)
         
 
-        #metric = get_mAP_metric(gt_boxes_tensor_val, regression_targets_tensor_val) TODO: Uncomment and implement
+        metric = get_mAP_metric(gt_boxes_tensor_val, regression_targets_tensor_val, clf_val) 
         
 
         print(f'Validating with batch {batch_idx_val}, got loss: {loss_val}')

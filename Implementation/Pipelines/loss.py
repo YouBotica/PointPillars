@@ -28,7 +28,7 @@ class PointPillarLoss(nn.Module):
         Inputs: 
         loc -- size (batch_size, n_anchors, 3, H, W)
         size -- size (batch_size, n_anchors, 3, H, W) 
-        clf -- size (batch_size, n_anchors, 3, H, W)
+        clf -- size (batch_size, n_anchors, n_classes+1, H, W)
         regression_targets -- tensor of size (batch_size, n_boxes, 2) with the indices of the best matching anchors
         gt_boxes_tensor -- size (bs, n_boxes, 4)
         '''
@@ -60,11 +60,12 @@ class PointPillarLoss(nn.Module):
                 background_focal_loss += -torch.log(clf_val)*self.alpha*(1 - clf_val)**self.gamma
                 n_classification_target += 1
 
-        if n_classification_target != 0.0:
-            background_focal_loss /= n_classification_target
-        else:
-            background_focal_loss = 0.0
-            print(f'Division by zero encountered on background!')   
+            if n_classification_target != 0.0:
+                background_focal_loss /= n_classification_target
+                n_classification_target = 0.0
+            else:
+                background_focal_loss = 0.0
+                print(f'Division by zero encountered on background!')   
 
 
 
