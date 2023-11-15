@@ -92,6 +92,8 @@ train_dataset = HDF5PillarDataset(train_data_file)
 # Create train loader as a torch DataLoader
 train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
 
+val_loader = DataLoader(train_dataset, batch_size=2, shuffle=True)
+
 
 n_epochs = 50
 model = PointPillarsModel(device=torch.device('cuda'), aug_dim=AUG_DIM)
@@ -103,7 +105,7 @@ lr_scheduler = StepLR(optimizer, step_size=15, gamma=0.8)
 loss = 0.0
 
 # Define a path to save the model
-model_save_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/fast_model.pth"
+model_save_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/fast_model2.pth"
 
 
 for epoch in range(n_epochs):
@@ -135,30 +137,23 @@ for epoch in range(n_epochs):
         classification_targets_dict = anchor.get_classification_targets(iou_tensor=iou_tensor, feature_map_size=(H,W),
                                     background_lower_threshold=0.05, background_upper_threshold=0.25)
         
-        data_prep_end = time.time()
-
-
-        forward_start = time.time()
 
         optimizer.zero_grad() # Refresh gradients for forward pass
 
         loc, size, clf, occupancy, angle, heading, pseudo_images, backbone_out = model(x=batched_pillars, x_orig_indices=batched_x_indices, 
                 y_orig_indices=batched_y_indices, num_x_pillars=NUM_X_PILLARS, num_y_pillars=NUM_Y_PILLARS)
         
-        forward_end = time.time()
         
         # Loss:
-        loss_compute_start = time.time()
         loss = loss_fn(regression_targets=regression_targets_tensor, classification_targets_dict=classification_targets_dict,
         gt_boxes_tensor = gt_boxes_tensor, loc=loc, size=size, clf=clf, occupancy=occupancy, angle=angle, heading=heading,
         anchor=anchor)
-        loss_compute_end = time.time()
+
 
         # Backpropagation
-        backprop_start = time.time()
         loss.backward()
         optimizer.step()
-        backprop_end = time.time()
+
 
         end_time = time.time()  # End time of the batch
         elapsed_time = end_time - start_time
@@ -166,10 +161,6 @@ for epoch in range(n_epochs):
         
         # Print times and logging:
         print(f'Epoch: {epoch}, batch: {batch_idx}, loss: {loss}, elapsed: {elapsed_time}')
-        #print(f'    Data prep time: {data_prep_end - data_prep_start:.2f}s')
-        #print(f'    Forward pass time: {forward_end - forward_start:.2f}s')
-        #print(f'    Loss computation time: {loss_compute_end - loss_compute_start:.2f}s')
-        #print(f'    Backpropagation time: {backprop_end - backprop_start:.2f}s')
 
 
         # Save model every 30 batches:
@@ -184,9 +175,46 @@ for epoch in range(n_epochs):
 
         
 
-        #if epoch % 2 == 0:
-        #    continue
+        if epoch % 2 == 0:
+            continue
         
         # TODO: Add validation here
+        '''Do a validation with unseen data'''
+
+        model.eval()
+        print(f'WARNING: Entering evaluation mode')
+        
+        start_time = time.time()
+        with torch.no_grad():
+            for batch_idx_val, (pseudo_images_val, batched_labels_val) in enumerate(val_loader):
+
+
+                gt_boxes_tensor_val = create_boxes_tensor(batched_labels_val, attributes_idx)
+        
+                # Check if gt_boxes_tensor is empty for the current batch
+                if gt_boxes_tensor_val.nelement() == 0:
+                    print(f'Encountered an empty element on the batch')
+                    continue
+
+
+                # Get IoU tensor and regression targets:
+                iou_tensor_val = anchor.calculate_batch_iou(gt_boxes_tensor_val) 
+                '''IoU tensor (batch_size, n_boxes, num_anchors_x, num_anchors_y)'''
+
+                # Regression targets from ground truth labels
+                regression_targets_tensor_val = anchor.get_regression_targets_tensor(iou_tensor_val, (H,W), threshold=0.5)
+
+                # Classification targets:
+                classification_targets_dict_val = anchor.get_classification_targets(iou_tensor=iou_tensor_val, feature_map_size=(H,W),
+                                            background_lower_threshold=0.05, background_upper_threshold=0.25)
+                
+                loc_val, size_val, clf_val, occupancy_val, angle_val, heading_val = model(pseudo_images_val)
+    
+                loss_val = loss_fn(regression_targets=regression_targets_tensor_val, classification_targets_dict=classification_targets_dict_val,
+                gt_boxes_tensor = gt_boxes_tensor_val, loc=loc_val, size=size_val, clf=clf_val, 
+                occupancy=occupancy_val, angle=angle_val, heading=heading_val, anchor=anchor)
+
+                print(f'Validating with batch {batch_idx_val}, got loss: {loss_val}')
+
 
     lr_scheduler.step()

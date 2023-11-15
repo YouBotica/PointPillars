@@ -72,12 +72,17 @@ attributes_idx = {
 small_train_pointclouds_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_train_velodyne'
 small_train_labels_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_labels_velodyne'
 
-mini_train_pointclouds_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/mini_train_velodyne'
-mini_train_labels_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/mini_label_velodyne'
+small_validations_pointclouds_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_validation_velodyne'
+small_validations_labels_dir = '/home/adlink/Documents/ECE-57000/ClassProject/Candidate2/PointPillars/dataset/kitti/training/small_validation_labels'
 
-device =  torch.device('cpu') # CPU should be used for pillarization
+
+device =  torch.device('cpu') # NOTE: CPU should be used for pillarization, GPU usually overflows
 
 train_set = KITTIDataset(pointcloud_dir=small_train_pointclouds_dir, labels_dir=small_train_labels_dir)
+
+validation_set = KITTIDataset(pointcloud_dir=small_validations_pointclouds_dir, labels_dir=small_validations_labels_dir)
+
+
 pillarizer = Pillarization(device=device, aug_dim=AUG_DIM, x_min=X_MIN, x_max=X_MAX, y_min=Y_MIN, y_max=Y_MAX, 
                                 z_min=Z_MIN, z_max=Z_MAX, pillar_size=PILLAR_SIZE, 
                                 max_points_per_pillar=MAX_POINTS_PER_PILLAR, max_pillars=MAX_FILLED_PILLARS)
@@ -85,13 +90,13 @@ pillarizer = Pillarization(device=device, aug_dim=AUG_DIM, x_min=X_MIN, x_max=X_
 
 
 # We'll save the data in an HDF5 file
-with h5py.File('/media/adlink/6a738988-44b7-4696-ba07-3daeb00e5683/kitti_pillars/pillar_data.h5', 'w') as h5f:
+with h5py.File('/media/adlink/6a738988-44b7-4696-ba07-3daeb00e5683/kitti_pillars/val_pillar_data.h5', 'w') as h5f:
     # Iterate through all point clouds in the dataset
-    for idx in tqdm(range(len(train_set))):
+    for idx in tqdm(range(len(validation_set))):
         # Get the point cloud and corresponding label
-        point_cloud, label = train_set[idx]
+        point_cloud, label = validation_set[idx]
 
-        label_as_tensor = normalize_annotations(annotations=label, pillar_size=PILLAR_SIZE,  # FIXME: ADD A RETURN STATEMENT
+        label_as_tensor = normalize_annotations(annotations=label, pillar_size=PILLAR_SIZE,  
                 x_lims=(X_MIN, X_MAX), y_lims=(Y_MIN, Y_MAX))
         
         # Pillarize the point cloud
