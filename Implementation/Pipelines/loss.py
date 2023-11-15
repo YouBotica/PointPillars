@@ -67,11 +67,20 @@ class PointPillarLoss(nn.Module):
             print(f'Division by zero encountered on background!')   
 
 
-        # Regression loss:
+
+        # Regression and classification loss for car objects:
         car_focal_loss = 0.0
         for b in range(batch_size):
-            for n in range(n_boxes):
 
+            # From gt_boxes_tensor, get indices of elements that are not 0
+            '''gt_boxes_tensor of size (bs, n_boxes, 2)'''
+            non_zeros = torch.nonzero(gt_boxes_tensor[b])
+            if non_zeros.size(0) == 0: # If there are no gt boxes, skip
+                continue
+
+            max_n_box = torch.max(non_zeros) 
+            for n in range(max_n_box + 1): # Add 1 to account for 0
+                # Index to look for objects on canvas:
                 x_idx = regression_targets[b, n, 0].long()  # Ensure the indices are long type
                 y_idx = regression_targets[b, n, 1].long()  # Ensure the indices are long type
 
@@ -79,6 +88,7 @@ class PointPillarLoss(nn.Module):
                 if (x_idx >= self.feature_map_size[1] or y_idx >= self.feature_map_size[0]): 
                     print(f'Exceeded an index, x_idx: {x_idx} and boundary: {self.feature_map_size[1]} or y_idx: {y_idx} and boundary: {self.feature_map_size[0]}')
                     continue
+                
 
                 x_pred[b, n] = loc[b, 0, 0, y_idx, x_idx]  # Indexing y first as it corresponds to H dimension
                 y_pred[b, n] = loc[b, 0, 1, y_idx, x_idx]  # Indexing y first as it corresponds to H dimension
@@ -88,11 +98,8 @@ class PointPillarLoss(nn.Module):
                 y_gt = gt_boxes_tensor[b, n, 1] - l_gt/2
                 dx_tensor[b, n] = (x_gt - x_pred[b,n]) / da 
                 dy_tensor[b, n] = (y_gt - y_pred[b,n]) / da 
-
                 # Sizes:
-                epsilon = 1e-6
-                #print(f'Size 0: {(size[b, 0, 0, y_idx, x_idx] + epsilon)}')
-    
+                epsilon = 1e-6 # Mitigates singularity in log
 
                 if (w_gt != 0.0):
                     dw_tensor[b, n] = torch.log((w_gt / (size[b, 0, 0, y_idx, x_idx] + epsilon)))
@@ -104,11 +111,13 @@ class PointPillarLoss(nn.Module):
                 car_focal_loss += -torch.log(car_prob)*self.alpha*(1 - car_prob)**self.gamma
 
 
-        if batch_size*n_boxes != 0.0:
-            car_focal_loss /= batch_size*n_boxes
-        else: 
-            print(f'Division by zero encountered on cars!')
-            car_focal_loss = 0.0 
+            # After iterating through the gt_boxes on the batch, calculate and accumulate the car_focal_loss
+            if max_n_box != 0.0:
+                car_focal_loss /= max_n_box
+            else: 
+                print(f'Division by zero encountered on cars!')
+                car_focal_loss = 0.0 
+
 
 
         # Calculate regression loss:

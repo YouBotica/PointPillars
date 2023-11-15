@@ -141,13 +141,13 @@ class Anchor():
     
     
     def calculate_batch_iou(self, gt_boxes_tensor):
-        # Expand anchor coordinates to match batch size and number of boxes
-        # Assuming gt_boxes_tensor is of shape (batch_size, n_boxes, 4)
+        # gt_boxes_tensor is of shape (batch_size, n_boxes, 4)
         # and contains [x1, y1, x2, y2] coordinates for the boxes
         batch_size, n_boxes, _ = gt_boxes_tensor.shape
         
         # Reshape anchor coordinates to allow broadcast with gt_boxes_tensor
         # Expanding dimensions to (batch_size, n_boxes, num_anchors_x, num_anchors_y)
+
         anchor_tl_x = self.anchor_tl_x.expand(batch_size, n_boxes, -1, -1)
         anchor_tl_y = self.anchor_tl_y.expand(batch_size, n_boxes, -1, -1)
         anchor_br_x = self.anchor_br_x.expand(batch_size, n_boxes, -1, -1)

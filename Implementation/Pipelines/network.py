@@ -62,9 +62,10 @@ class PointPillarsModel(nn.Module):
                 # This allows us to put cur_features at the specific indices in the pseudo image
                 pseudo_images[b][c] = pseudo_images[b][c].index_put_((cur_y_indices[c], cur_x_indices[c]), cur_features[c], accumulate=False)
 
-        #pdb.set_trace()
+
         #if self.transform: DEPRECATED
         #    pseudo_image = self.transform(pseudo_image)
+
         backbone_out = self.backbone(pseudo_images)
         loc, size, clf, occupancy, angle, heading = self.detection_head(backbone_out)
 
