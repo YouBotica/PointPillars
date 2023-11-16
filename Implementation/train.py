@@ -2,6 +2,7 @@ import os
 import pdb
 import torch
 import numpy as np
+import pandas as pd
 from torch.utils.data import Dataset, DataLoader, random_split
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -48,6 +49,7 @@ NUM_X_PILLARS = int((X_MAX - X_MIN) / PILLAR_SIZE[0])
 NUM_Y_PILLARS= int((Y_MAX - Y_MIN) / PILLAR_SIZE[1])
 DESIRED_CLASSES = ['Car'] # More classes can be added here
 SCALE_FACTOR = 1.5
+PRETRAINED = True
 H = 500
 W = 440
 
@@ -86,30 +88,51 @@ device = torch.device('cuda')
 
 '''Create data loaders'''
 train_data_file = '/media/adlink/6a738988-44b7-4696-ba07-3daeb00e5683/kitti_pillars/train_data.h5'
+val_data_file = '/media/adlink/6a738988-44b7-4696-ba07-3daeb00e5683/kitti_pillars/val_pillar_data.h5'
+
 
 train_dataset = HDF5PillarDataset(train_data_file)
+val_dataset = HDF5PillarDataset(val_data_file)
 
 # Create train loader as a torch DataLoader
 train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=2, shuffle=True)
 
-val_loader = DataLoader(train_dataset, batch_size=2, shuffle=True)
 
 
-n_epochs = 50
+# Initialize your model without weights
 model = PointPillarsModel(device=torch.device('cuda'), aug_dim=AUG_DIM)
+
+if PRETRAINED:
+    
+    model = PointPillarsModel(device=torch.device('cuda'), aug_dim=AUG_DIM)
+
+    # Define the path to the pretrained model checkpoint
+    pretrained_model_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/fast_model4.pth"  
+
+    # Load the pretrained model checkpoint
+    checkpoint = torch.load(pretrained_model_path)
+
+    # Load the pretrained model's state dictionary into your model
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+
 loss_fn = PointPillarLoss(feature_map_size=(H, W))
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
 # Creates a learning rate scheduler that decays the learning rate every 15 epochs
 lr_scheduler = StepLR(optimizer, step_size=15, gamma=0.8)
-loss = 0.0
 
 # Define a path to save the model
-model_save_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/fast_model2.pth"
+model_save_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/fast_model4_improved.pth"
 
+n_epochs = 40
+
+epoch_loss_dict = {}
 
 for epoch in range(n_epochs):
     model.train()
+    epoch_loss = 0.0
 
     for batch_idx, (batched_pillars, batched_labels, batched_x_indices, batched_y_indices) in enumerate(train_loader):
         model.train()
@@ -127,8 +150,8 @@ for epoch in range(n_epochs):
 
 
         # Get IoU tensor and regression targets:
-        iou_tensor = anchor.calculate_batch_iou(gt_boxes_tensor) 
-        '''IoU tensor (batch_size, n_boxes, num_anchors_x, num_anchors_y)'''
+        iou_tensor = anchor.calculate_batch_iou(gt_boxes_tensor) # IoU tensor (batch_size, n_boxes, num_anchors_x, num_anchors_y)
+
 
         # Regression targets from ground truth labels
         regression_targets_tensor = anchor.get_regression_targets_tensor(iou_tensor, (H,W), threshold=0.5)
@@ -148,10 +171,15 @@ for epoch in range(n_epochs):
         loss = loss_fn(regression_targets=regression_targets_tensor, classification_targets_dict=classification_targets_dict,
         gt_boxes_tensor = gt_boxes_tensor, loc=loc, size=size, clf=clf, occupancy=occupancy, angle=angle, heading=heading,
         anchor=anchor)
+        
 
-
-        # Backpropagation
-        loss.backward()
+        print(loss.requires_grad, loss.grad_fn) # FIXME: Get rid of this after solving the bug
+        try:
+            # Backpropagation
+            loss.backward()
+        except RuntimeError as e:
+            print(f"Caught a RuntimeError during loss.backward(): {e}")
+        
         optimizer.step()
 
 
@@ -172,25 +200,23 @@ for epoch in range(n_epochs):
                 'loss': loss,
             }, model_save_path)
             print(f"Model saved to {model_save_path}")
+    
+        epoch_loss += loss
 
+        #if epoch % 2 == 0:
+        #    continue
         
+        #Do a validation with unseen data
 
-        if epoch % 2 == 0:
-            continue
-        
-        # TODO: Add validation here
-        '''Do a validation with unseen data'''
-
-        model.eval()
+        '''model.eval()
         print(f'WARNING: Entering evaluation mode')
-        
+
         start_time = time.time()
         with torch.no_grad():
-            for batch_idx_val, (pseudo_images_val, batched_labels_val) in enumerate(val_loader):
-
+            for batch_idx_val, (batched_pillars_val, batched_labels_val, batched_x_indices_val, batched_y_indices_val) in enumerate(val_loader):
 
                 gt_boxes_tensor_val = create_boxes_tensor(batched_labels_val, attributes_idx)
-        
+
                 # Check if gt_boxes_tensor is empty for the current batch
                 if gt_boxes_tensor_val.nelement() == 0:
                     print(f'Encountered an empty element on the batch')
@@ -198,8 +224,8 @@ for epoch in range(n_epochs):
 
 
                 # Get IoU tensor and regression targets:
-                iou_tensor_val = anchor.calculate_batch_iou(gt_boxes_tensor_val) 
-                '''IoU tensor (batch_size, n_boxes, num_anchors_x, num_anchors_y)'''
+                iou_tensor_val = anchor.calculate_batch_iou(gt_boxes_tensor_val)  # IoU tensor (batch_size, n_boxes, num_anchors_x, num_anchors_y)
+
 
                 # Regression targets from ground truth labels
                 regression_targets_tensor_val = anchor.get_regression_targets_tensor(iou_tensor_val, (H,W), threshold=0.5)
@@ -208,13 +234,31 @@ for epoch in range(n_epochs):
                 classification_targets_dict_val = anchor.get_classification_targets(iou_tensor=iou_tensor_val, feature_map_size=(H,W),
                                             background_lower_threshold=0.05, background_upper_threshold=0.25)
                 
-                loc_val, size_val, clf_val, occupancy_val, angle_val, heading_val = model(pseudo_images_val)
-    
-                loss_val = loss_fn(regression_targets=regression_targets_tensor_val, classification_targets_dict=classification_targets_dict_val,
-                gt_boxes_tensor = gt_boxes_tensor_val, loc=loc_val, size=size_val, clf=clf_val, 
-                occupancy=occupancy_val, angle=angle_val, heading=heading_val, anchor=anchor)
 
-                print(f'Validating with batch {batch_idx_val}, got loss: {loss_val}')
+                loc_val, size_val, clf_val, occupancy_val, angle_val, heading_val, pseudo_images, backbone_out = model(
+                    x=batched_pillars_val, x_orig_indices=batched_x_indices_val,  
+                    y_orig_indices=batched_y_indices_val, num_x_pillars=NUM_X_PILLARS, num_y_pillars=NUM_Y_PILLARS)
+                
+
+                loss_val = loss_fn(regression_targets=regression_targets_tensor_val, 
+                                classification_targets_dict=classification_targets_dict_val,
+                                    gt_boxes_tensor = gt_boxes_tensor_val, loc=loc_val, size=size_val, 
+                                    clf=clf_val, occupancy=occupancy_val, angle=angle_val, heading=heading_val, 
+                                    anchor=anchor)
+                
+
+                #metric = get_mAP_metric(gt_boxes_tensor_val, regression_targets_tensor_val, clf_val) TODO
+                
+
+                print(f'Validating with batch {batch_idx_val}, got loss: {loss_val}')'''
+        
+    epoch_loss_dict[epoch] = epoch_loss/batch_idx
 
 
     lr_scheduler.step()
+
+print(f'Finished, the list is {epoch_loss_dict}')
+df = pd.DataFrame(dict)
+     
+# saving the dataframe
+df.to_csv('GFG.csv')

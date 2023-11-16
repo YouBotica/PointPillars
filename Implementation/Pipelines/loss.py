@@ -46,9 +46,11 @@ class PointPillarLoss(nn.Module):
 
      
         # Classification loss:
-        '''background probs -- dict{batch: prob_loss}'''
+        '''classification targets dict is:
+            classification_targets[batch_idx].append((box_idx, feature_map_x_idx, feature_map_y_idx, class_label))'''
         background_focal_loss = 0.0
         n_classification_target = 0
+
 
         for b in range(batch_size):
             for n_target, cls_target in enumerate(classification_targets_dict[b]):
@@ -60,13 +62,14 @@ class PointPillarLoss(nn.Module):
                 background_focal_loss += -torch.log(clf_val)*self.alpha*(1 - clf_val)**self.gamma
                 n_classification_target += 1
 
+
             if n_classification_target != 0.0:
                 background_focal_loss /= n_classification_target
-                n_classification_target = 0.0
-            else:
-                background_focal_loss = 0.0
-                print(f'Division by zero encountered on background!')   
+                n_classification_target = 0
 
+            else:
+                background_focal_loss = 0.0 
+                print(f'Division by zero encountered on background!')   
 
 
         # Regression and classification loss for car objects:
@@ -123,7 +126,7 @@ class PointPillarLoss(nn.Module):
 
         # Calculate regression loss:
         loc_loss_x = self.smooth_l1_loss(dx_tensor, torch.zeros_like(dx_tensor))
-        loc_loss_y = self.smooth_l1_loss(dy_tensor, torch.zeros_like(dx_tensor))
+        loc_loss_y = self.smooth_l1_loss(dy_tensor, torch.zeros_like(dy_tensor))
         width_loss = self.smooth_l1_loss(dw_tensor, torch.zeros_like(dw_tensor))
         length_loss = self.smooth_l1_loss(dl_tensor, torch.zeros_like(dl_tensor))
 

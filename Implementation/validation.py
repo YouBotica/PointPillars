@@ -103,7 +103,7 @@ val_loader = DataLoader(val_dataset, batch_size=2, shuffle=True)
 model = PointPillarsModel(device=torch.device('cuda'), aug_dim=AUG_DIM)
 
 # Define the path to the pretrained model checkpoint
-pretrained_model_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/best.pth"  
+pretrained_model_path = "/home/adlink/Documents/ECE-57000/ClassProject/github/PointPillars/Implementation/saved_models/fast_model4.pth"  
 
 # Load the pretrained model checkpoint
 checkpoint = torch.load(pretrained_model_path)
